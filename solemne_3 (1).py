@@ -12,100 +12,139 @@ import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
 
-# Función para obtener datos desde la API
+# Obtener datos de la API REST Countries
 @st.cache
-def fetch_country_data():
+def fetch_data():
     url = "https://restcountries.com/v3.1/all"
     response = requests.get(url)
     if response.status_code == 200:
         return response.json()
     else:
-        st.error("No se pudieron obtener los datos. Intente más tarde.")
+        st.error("No se pudieron obtener los datos de la API.")
         return []
 
-# Función para procesar datos
-@st.cache
-def process_data(data):
+data = fetch_data()
+
+# Procesar datos
+if data:
     countries = []
     for country in data:
         countries.append({
             "Nombre": country.get("name", {}).get("common", "N/A"),
             "Región": country.get("region", "N/A"),
             "Población": country.get("population", 0),
-            "Área (km²)": country.get("area", 0),
+            "Área": country.get("area", 0),
             "Fronteras": len(country.get("borders", [])),
-            "Idiomas": len(country.get("languages", {}).keys()),
+            "Idiomas": len(country.get("languages", {})),
             "Zonas Horarias": len(country.get("timezones", []))
         })
-    return pd.DataFrame(countries)
 
-# Inicio de la Aplicación Streamlit
-st.title("Análisis de Datos de Países con REST Countries API")
-st.sidebar.title("Navegación")
-menu = st.sidebar.radio("Selecciona una página", ["Inicio", "Interacción con Datos", "Gráficos"])
+    df = pd.DataFrame(countries)
 
-data = fetch_country_data()
-dataframe = process_data(data)
+    # Configurar multipágina
+    st.set_page_config(page_title="Solemne 3 - API REST Countries", layout="wide")
 
-if menu == "Inicio":
-    st.header("Descripción del Proyecto")
-    st.write("""
-    Esta aplicación interactiva utiliza datos de la API REST Countries para analizar información
-    sobre países, incluyendo su población, área, idiomas oficiales, regiones, y más.
-    """)
-    st.write("[Visita la API REST Countries](https://restcountries.com/v3.1/all)")
-    st.dataframe(dataframe)
+    # Página 1: Descripción del proyecto
+    def descripcion():
+        st.title("Solemne 3: Visualización de Datos con Streamlit")
+        st.markdown(
+            """
+            ### Proyecto basado en la API REST Countries
+            Este proyecto utiliza datos obtenidos de [REST Countries API](https://restcountries.com/v3.1/all) 
+            para explorar y analizar información sobre países del mundo. La aplicación incluye:
+            - Estadísticas básicas y filtros.
+            - Visualización de datos interactiva.
+            - Descarga de gráficos y datos procesados.
+            """
+        )
 
-elif menu == "Interacción con Datos":
-    st.header("Interacción con Datos")
+    # Página 2: Interacción con los datos
+    def interaccion():
+        st.title("Interacción con los Datos")
+        st.dataframe(df)
 
-    st.subheader("Estadísticas de una Columna")
-    column = st.selectbox("Selecciona una columna:", dataframe.select_dtypes(include=['float64', 'int64']).columns)
-    if column:
-        st.write(f"Media: {dataframe[column].mean()}")
-        st.write(f"Mediana: {dataframe[column].median()}")
-        st.write(f"Desviación estándar: {dataframe[column].std()}")
+        # Estadísticas básicas
+        columna = st.selectbox("Selecciona una columna para estadísticas básicas", df.select_dtypes(include=[int, float]).columns)
+        if columna:
+            st.write(f"Media de {columna}: {df[columna].mean():.2f}")
+            st.write(f"Mediana de {columna}: {df[columna].median():.2f}")
+            st.write(f"Desviación estándar de {columna}: {df[columna].std():.2f}")
 
-    st.subheader("Ordenar Datos")
-    column_sort = st.selectbox("Selecciona una columna para ordenar:", dataframe.columns)
-    order = st.radio("Ordenar:", ["Ascendente", "Descendente"])
-    if column_sort:
-        sorted_df = dataframe.sort_values(by=column_sort, ascending=(order == "Ascendente"))
-        st.dataframe(sorted_df)
+        # Ordenar datos
+        columna_orden = st.selectbox("Selecciona una columna para ordenar", df.columns)
+        orden_ascendente = st.radio("Ordenar en forma ascendente?", ("Sí", "No")) == "Sí"
+        df_ordenado = df.sort_values(by=columna_orden, ascending=orden_ascendente)
+        st.dataframe(df_ordenado)
 
-    st.subheader("Filtrar Datos")
-    column_filter = st.selectbox("Selecciona una columna numérica para filtrar:", dataframe.select_dtypes(include=['float64', 'int64']).columns)
-    if column_filter:
-        min_val, max_val = st.slider("Selecciona el rango:", float(dataframe[column_filter].min()), float(dataframe[column_filter].max()), (float(dataframe[column_filter].min()), float(dataframe[column_filter].max())))
-        filtered_df = dataframe[(dataframe[column_filter] >= min_val) & (dataframe[column_filter] <= max_val)]
-        st.dataframe(filtered_df)
+        # Filtrar filas
+        columna_filtro = st.selectbox("Selecciona una columna numérica para filtrar", df.select_dtypes(include=[int, float]).columns)
+        if columna_filtro:
+            rango = st.slider("Selecciona el rango de valores", float(df[columna_filtro].min()), float(df[columna_filtro].max()), (float(df[columna_filtro].min()), float(df[columna_filtro].max())))
+            df_filtrado = df[(df[columna_filtro] >= rango[0]) & (df[columna_filtro] <= rango[1])]
+            st.dataframe(df_filtrado)
 
-    if st.button("Descargar Datos Filtrados"):
-        filtered_df.to_csv("datos_filtrados.csv", index=False)
-        st.success("Archivo descargado: datos_filtrados.csv")
+            # Descargar datos filtrados
+            st.download_button(
+                "Descargar datos filtrados en CSV",
+                data=df_filtrado.to_csv(index=False),
+                file_name="datos_filtrados.csv",
+                mime="text/csv"
+            )
 
-elif menu == "Gráficos":
-    st.header("Gráficos Interactivos")
+    # Página 3: Gráficos interactivos
+    def graficos():
+        st.title("Gráficos Interactivos")
 
-    x_axis = st.selectbox("Selecciona el eje X:", dataframe.select_dtypes(include=['float64', 'int64']).columns)
-    y_axis = st.selectbox("Selecciona el eje Y:", dataframe.select_dtypes(include=['float64', 'int64']).columns)
+        # Selección de variables
+        x_col = st.selectbox("Selecciona la variable para el eje X", df.select_dtypes(include=[int, float]).columns)
+        y_col = st.selectbox("Selecciona la variable para el eje Y", df.select_dtypes(include=[int, float]).columns)
 
-    chart_type = st.radio("Selecciona el tipo de gráfico:", ["Dispersión", "Línea", "Barras"])
+        # Rango personalizado
+        if x_col and y_col:
+            x_min, x_max = st.slider("Rango del eje X", float(df[x_col].min()), float(df[x_col].max()), (float(df[x_col].min()), float(df[x_col].max())))
+            y_min, y_max = st.slider("Rango del eje Y", float(df[y_col].min()), float(df[y_col].max()), (float(df[y_col].min()), float(df[y_col].max())))
 
-    if chart_type and x_axis and y_axis:
-        fig, ax = plt.subplots()
-        if chart_type == "Dispersión":
-            ax.scatter(dataframe[x_axis], dataframe[y_axis])
-        elif chart_type == "Línea":
-            ax.plot(dataframe[x_axis], dataframe[y_axis])
-        elif chart_type == "Barras":
-            ax.bar(dataframe[x_axis], dataframe[y_axis])
+            # Tipo de gráfico
+            tipo_grafico = st.selectbox("Selecciona el tipo de gráfico", ["Dispersión", "Línea", "Barra"])
 
-        ax.set_xlabel(x_axis)
-        ax.set_ylabel(y_axis)
-        ax.set_title(f"{chart_type} de {x_axis} vs {y_axis}")
-        st.pyplot(fig)
+            # Generar gráfico
+            fig, ax = plt.subplots()
+            if tipo_grafico == "Dispersión":
+                ax.scatter(df[x_col], df[y_col])
+            elif tipo_grafico == "Línea":
+                ax.plot(df[x_col], df[y_col])
+            elif tipo_grafico == "Barra":
+                ax.bar(df[x_col], df[y_col])
 
-    if st.button("Descargar Gráfico"):
-        fig.savefig("grafico.png")
-        st.success("Archivo descargado: grafico.png")
+            ax.set_xlim(x_min, x_max)
+            ax.set_ylim(y_min, y_max)
+            ax.set_xlabel(x_col)
+            ax.set_ylabel(y_col)
+            ax.set_title(f"Gráfico de {tipo_grafico}")
+            st.pyplot(fig)
+
+            # Descargar gráfico
+            st.download_button(
+                "Descargar gráfico en PNG",
+                data=fig_to_png(fig),
+                file_name="grafico.png",
+                mime="image/png"
+            )
+
+    # Conversión de gráfico a PNG
+    def fig_to_png(fig):
+        import io
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png")
+        buf.seek(0)
+        return buf.getvalue()
+
+    # Navegación entre páginas
+    page = st.sidebar.selectbox("Navega entre las páginas", ["Descripción", "Interacción", "Gráficos"])
+
+    if page == "Descripción":
+        descripcion()
+    elif page == "Interacción":
+        interaccion()
+    elif page == "Gráficos":
+        graficos()
